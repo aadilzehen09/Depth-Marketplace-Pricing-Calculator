@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Marketplace Pricing Calculator</title>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --card:#0b1220;
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --accent:#22d3ee;
+      --good:#10b981;
+      --bad:#ef4444;
+      --border:#1f2937;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:#0f172a;font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--text)}
+    .wrap{max-width:1200px;margin:40px auto;padding:0 20px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:24px}
+    h1{font-size:1.6rem;margin:0;font-weight:700}
+    .sub{color:var(--muted);font-size:.95rem}
+    .card{background:#111827;border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    thead th{font-size:.8rem;color:var(--muted);text-align:left;padding:0 6px 4px}
+    tbody tr{background:var(--card);border:1px solid var(--border)}
+    tbody td{padding:8px 6px;vertical-align:middle}
+    .platform{font-weight:700}
+    .pill{padding:4px 8px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,.03)}
+    .pill.good{color:var(--good);border-color:rgba(16,185,129,.35)}
+    .pill.bad{color:var(--bad);border-color:rgba(239,68,68,.35)}
+    input{width:100%;padding:6px;background:#0b1020;border:1px solid var(--border);border-radius:8px;color:var(--text);outline:none;font-size:.85rem}
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(34,211,238,.2)}
+    input[readonly]{opacity:.9}
+    .toolbar{display:flex;gap:8px}
+    button{cursor:pointer;border:1px solid var(--border);background:#0b1020;color:var(--text);border-radius:8px;padding:8px 12px;font-weight:600;font-size:.9rem}
+    button:hover{border-color:var(--accent)}
+    .accent{background:rgba(34,211,238,.15);border-color:rgba(34,211,238,.5)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Marketplace Pricing Calculator</h1>
+        <div class="sub">Enter costs and percentages. GST, Fees, Commission can be given in % of Market Price.</div>
+      </div>
+      <div class="toolbar">
+        <button class="accent" id="resetAll">Reset</button>
+        <button id="downloadCsv">Export CSV</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Buying (₹)</th>
+            <th>Packing (₹)</th>
+            <th>Fees %</th>
+            <th>GST %</th>
+            <th>Commission %</th>
+            <th>Shipping (₹)</th>
+            <th>Coupons (₹)</th>
+            <th>Other (₹)</th>
+            <th>Total Cost (₹)</th>
+            <th>Market Price (₹)</th>
+            <th>Profit/Loss</th>
+            <th>Margin %</th>
+            <th>Break-even</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    const platforms = ["Amazon","Flipkart","Meesho"];
+
+    function money(n){if(isNaN(n)||n==="")return "";return Number(n).toFixed(2);}
+
+    function compute(data){
+      const {buy,pack,fees,gst,comm,ship,coupon,other,market} = data;
+      const m = Number(market)||0;
+      const cost = (Number(buy)||0)+(Number(pack)||0)+(Number(ship)||0)+(Number(coupon)||0)+(Number(other)||0);
+      const feeAmt = (Number(fees)||0)/100*m;
+      const gstAmt = (Number(gst)||0)/100*m;
+      const commAmt = (Number(comm)||0)/100*m;
+      const total = cost+feeAmt+gstAmt+commAmt;
+      const profit = m-total;
+      const margin = total? (profit/total)*100:0;
+      return {total,profit,margin,breakeven:total};
+    }
+
+    function rowTemplate(name){
+      return `<tr>
+        <td class="platform">${name}</td>
+        <td><input type="number" class="buy" /></td>
+        <td><input type="number" class="pack" /></td>
+        <td><input type="number" class="fees" /></td>
+        <td><input type="number" class="gst" /></td>
+        <td><input type="number" class="comm" /></td>
+        <td><input type="number" class="ship" /></td>
+        <td><input type="number" class="coupon" /></td>
+        <td><input type="number" class="other" /></td>
+        <td><input type="text" class="total" readonly /></td>
+        <td><input type="number" class="market" /></td>
+        <td><span class="pill result">—</span></td>
+        <td><span class="pill margin">—</span></td>
+        <td><span class="pill breakeven">—</span></td>
+      </tr>`;
+    }
+
+    function render(){
+      const tbody=document.getElementById('rows');
+      tbody.innerHTML=platforms.map(p=>rowTemplate(p)).join('');
+      tbody.querySelectorAll('input').forEach(inp=>{
+        inp.addEventListener('input',handleCalc);
+        inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();handleCalc();}});
+      });
+    }
+
+    function handleCalc(){
+      document.querySelectorAll('#rows tr').forEach(tr=>{
+        const vals={
+          buy:tr.querySelector('.buy').value,
+          pack:tr.querySelector('.pack').value,
+          fees:tr.querySelector('.fees').value,
+          gst:tr.querySelector('.gst').value,
+          comm:tr.querySelector('.comm').value,
+          ship:tr.querySelector('.ship').value,
+          coupon:tr.querySelector('.coupon').value,
+          other:tr.querySelector('.other').value,
+          market:tr.querySelector('.market').value
+        };
+        const {total,profit,margin,breakeven}=compute(vals);
+        tr.querySelector('.total').value=total?money(total):'';
+        const resEl=tr.querySelector('.result');
+        resEl.textContent=(profit||profit===0)?(profit>=0?`+₹${money(profit)}`:`-₹${money(Math.abs(profit))}`):'—';
+        resEl.className=`pill result ${profit>0?'good':''} ${profit<0?'bad':''}`;
+        const marEl=tr.querySelector('.margin');
+        marEl.textContent=(profit||profit===0)?`${money(margin)}%`:'—';
+        marEl.className=`pill margin ${margin>0?'good':''} ${margin<0?'bad':''}`;
+        tr.querySelector('.breakeven').textContent=total?`₹${money(breakeven)}`:'—';
+      });
+    }
+
+    document.getElementById('downloadCsv').addEventListener('click',()=>{
+      let csv='Platform,Buying,Packing,Fees%,GST%,Commission%,Shipping,Coupons,Other,Total,Market,Profit/Loss,Margin%,Break-even\n';
+      document.querySelectorAll('#rows tr').forEach(tr=>{
+        const vals=[
+          tr.querySelector('.platform').textContent.trim(),
+          tr.querySelector('.buy').value,
+          tr.querySelector('.pack').value,
+          tr.querySelector('.fees').value,
+          tr.querySelector('.gst').value,
+          tr.querySelector('.comm').value,
+          tr.querySelector('.ship').value,
+          tr.querySelector('.coupon').value,
+          tr.querySelector('.other').value,
+          tr.querySelector('.total').value,
+          tr.querySelector('.market').value,
+          tr.querySelector('.result').textContent,
+          tr.querySelector('.margin').textContent,
+          tr.querySelector('.breakeven').textContent
+        ];
+        csv+=vals.join(',')+'\n';
+      });
+      const blob=new Blob([csv],{type:'text/csv'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download='pricing.csv';a.click();URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('resetAll').addEventListener('click',()=>{
+      document.querySelectorAll('#rows input').forEach(i=>i.value='');
+      handleCalc();
+    });
+
+    render();
+    handleCalc();
+  </script>
+</body>
+</html>
